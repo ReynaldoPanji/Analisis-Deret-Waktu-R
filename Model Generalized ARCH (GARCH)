@@ -1,0 +1,105 @@
+getwd()
+setwd("D:\\R Project\\Analisis Deret Waktu\\UAS")
+ls()
+rm(list=ls(all=TRUE))
+
+library(forecast)
+library(tstools)
+library(TSA)
+library(tseries)
+library(astsa)
+library(ggpubr)
+library(nortest)
+library(FinTS)
+library(quantmod)
+library(rugarch)
+library(fBasics)
+library(fGarch)
+
+#======================Read Data======================#
+KRAS <- read.csv("KRAS.JK_DAILY.csv",header=T)
+KRAS.Close <- KRAS$Close
+Return.KRAS.Close <- diff(log(KRAS.Close),lag=1)
+
+#=================Ploting Time Series=================#
+Return.KRAS.Close.ts <- ts(Return.KRAS.Close,start=c(1,1),frequency=1)
+plot.ts(Return.KRAS.Close.ts,type="l",xlab="Hari ke",ylab="Log Return",main="Log Return Penutupan PT Krakatau Steel")
+abline(h=0,col="red")
+
+#===================Informasi Umum====================#
+basicStats(Return.KRAS.Close.ts)
+hist(Return.KRAS.Close.ts,main="Default Histogram")
+
+#=====================ACF dan PACF====================#
+par(mfrow=c(3,1))
+acf(Return.KRAS.Close.ts,ylab="Autocovariance",xlab="Lag",main="Plot Autocovariance")
+abline(h=0,col="red")
+acf(Return.KRAS.Close.ts,type="correlation",lag=50,ylab="ACF",xlab="Lag",main="Plot Autocorrelation")
+abline(h=0,col="red")
+acf(Return.KRAS.Close.ts,type="partial",lag=50,ylab="PACF",xlab="Lag",main="Plot Partial Autocorrelation")
+abline(h=0,col="red")
+eacf(Return.KRAS.Close.ts)
+
+#=================ADF Stationary Test=================#
+adf.test(Return.KRAS.Close.ts,alternative="stationary")
+
+#==================Mengecek Outlier===================#
+boxplot.stats(Return.KRAS.Close.ts)$out
+
+#==============Jarque Bera Normality Test=============#
+jarque.bera.test(Return.KRAS.Close.ts)
+
+#============Ljung-Box Autocorrelation Test===========#
+AutocorTest((Return.KRAS.Close.ts)^2 ,type="Ljung-Box")
+AutocorTest(abs(Return.KRAS.Close.ts),type="Ljung-Box")
+
+#================Uji Heteroskedastisitas==============#
+ArchTest(Return.KRAS.Close.ts)
+
+#=======ACF dan PACF Return Kuadrat dan Mutlak========#
+par(mfrow=c(2,2))
+acf((Return.KRAS.Close.ts)^2,type="correlation",lag=50,ylab="ACF",xlab="Lag",main="Plot ACF Residu Kuadrat")
+abline(h=0,col="red")
+acf((Return.KRAS.Close.ts)^2,type="partial",lag=50,ylab="PACF",xlab="Lag",main="Plot PACF Residu Kuadrat")
+abline(h=0,col="red")
+acf(abs(Return.KRAS.Close.ts),type="correlation",lag=50,ylab="ACF",xlab="Lag",main="Plot ACF Residu Mutlak")
+abline(h=0,col="red")
+acf(abs(Return.KRAS.Close.ts),type="partial",lag=50,ylab="PACF",xlab="Lag",main="Plot PACF Residu Mutlak")
+abline(h=0,col="red")
+eacf((Return.KRAS.Close.ts)^2)
+eacf(abs(Return.KRAS.Close.ts))
+
+#==================Pemodelan GARCH===================#
+garch.11.KRAS <- garchFit(formula=~garch(1,1),data=Return.KRAS.Close.ts)
+garch.12.KRAS <- garchFit(formula=~garch(1,2),data=Return.KRAS.Close.ts)
+garch.21.KRAS <- garchFit(formula=~garch(2,1),data=Return.KRAS.Close.ts)
+garch.22.KRAS <- garchFit(formula=~garch(2,2),data=Return.KRAS.Close.ts)
+
+#================Seleksi Model GARCH=================#
+summary(garch.11.KRAS)
+summary(garch.12.KRAS)
+summary(garch.21.KRAS)
+summary(garch.22.KRAS)
+
+#===================Model Terbaik==================#
+garch.11.KRAS
+
+#===================Plot Residual===================#
+par(mfrow=c(1,1))
+Res.Model <- residuals(garch.11.KRAS)
+plot.ts(Res.Model,ylab="Residual",xlab="Waktu",main="Plot Residuals GARCH(1,1)")
+abline(h=0,col="blue")
+
+#=====================Plot Q-Q======================#
+ggdensity(Res.Model, fill="lightgray")
+ggqqplot(Res.Model)
+
+#============Jarque Bera Normality Test============#
+jarque.bera.test(Res.Model)
+
+#=========Ljung-Box Autocorrelation Test=========#
+AutocorTest(Res.Model,type="Ljung-Box")
+
+#============Forecasting Volatilitas==============#
+forecast.Model <- predict(garch.11.KRAS,12)
+forecast.Model
