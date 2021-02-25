@@ -1,0 +1,135 @@
+getwd()
+setwd("D:\\")
+ls()
+rm(list=ls(all=TRUE))
+
+library(forecast)
+library(tstools)
+library(TSA)
+library(tseries)
+library(astsa)
+library(ggpubr)
+library(nortest)
+library(FinTS)
+
+#======================Read Data======================#
+Beer <- read.csv("USA Beer production.csv",header=T)
+Beer.Prod <- Beer$beerproductionusa
+
+#=================Ploting Time Series=================#
+Beer.Prod.ts <- ts(Beer.Prod,start=c(1970,1),frequency=12)
+plot.ts(Beer.Prod.ts,type="o",xlab="Waktu (Bulan)",ylab="Produksi (Million barrel)",main="Hasil Produksi Beer")
+
+#=====================ACF dan PACF====================#
+par(mfrow=c(3,1))
+acf(Beer.Prod.ts,ylab="Autocovariance",xlab="Lag",main="Plot Autocovariance")
+abline(h=0,col="red")
+acf(Beer.Prod.ts,type="correlation",lag=50,ylab="ACF",xlab="Lag",main="Plot Autocorrelation")
+abline(h=0,col="red")
+acf(Beer.Prod.ts,type="partial",lag=50,ylab="PACF",xlab="Lag",main="Plot Partial Autocorrelation")
+abline(h=0,col="red")
+eacf(Beer.Prod.ts)
+
+#=================ADF Stationary Test=================#
+adf.test(Beer.Prod.ts,alternative="stationary")
+
+#==================Seasonality Test===================#
+seasonplot(Beer.Prod.ts)
+trendcycle(Beer.Prod.ts)
+
+#==================Mengecek Outlier===================#
+boxplot.stats(Beer.Prod.ts)$out
+
+#=================Differencing Trend==================#
+par(mfrow=c(1,1))
+Tren.Beer.Prod <- diff(Beer.Prod.ts,lag=1) 
+Tren.Beer.Prod.ts <- ts(Tren.Beer.Prod)
+plot.ts(Tren.Beer.Prod.ts,type="o",xlab="Lag",main="Differencing Trend",col="Blue")
+
+#=================ACF dan PACF Trend==================#
+par(mfrow=c(3,1))
+acf(Tren.Beer.Prod.ts,ylab="Autocovariance",xlab="Lag",main="Plot Autocovariance")
+abline(h=0,col="red")
+acf(Tren.Beer.Prod.ts,type="correlation",lag=50,ylab="ACF",xlab="Lag",main="Plot Autocorrelation")
+abline(h=0,col="red")
+acf(Tren.Beer.Prod.ts,type="partial",lag=50,ylab="PACF",xlab="Lag",main="Plot Partial Autocorrelation")
+abline(h=0,col="red")
+eacf(Tren.Beer.Prod.ts)
+
+#==============ADF Stationary Test Trend===============#
+adf.test(Tren.Beer.Prod.ts,alternative="stationary")
+
+#================Differencing Seasonal================#
+par(mfrow=c(1,1))
+Seasonal.Beer.Prod <- diff(Tren.Beer.Prod.ts,lag=12)
+Seasonal.Beer.Prod.ts <- ts(Seasonal.Beer.Prod)
+plot.ts(Seasonal.Beer.Prod.ts,type="o",xlab="Lag",main="Differencing Seasonal",col="Red")
+
+#================ACF dan PACF Seasonal================#
+par(mfrow=c(3,1))
+acf(Seasonal.Beer.Prod.ts,ylab="Autocovariance",xlab="Lag",main="Plot Autocovariance")
+abline(h=0,col="red")
+acf(Seasonal.Beer.Prod.ts,type="correlation",lag=50,ylab="ACF",xlab="Lag",main="Plot Autocorrelation")
+abline(h=0,col="red")
+acf(Seasonal.Beer.Prod.ts,type="partial",lag=50,ylab="PACF",xlab="Lag",main="Plot Partial Autocorrelation")
+abline(h=0,col="red")
+eacf(Seasonal.Beer.Prod.ts)
+
+#==================Pemodelan SARIMA==================#
+sarima.Beer.Prod.110.011 <- arima(Beer.Prod.ts,order=c(1,1,0),seasonal=list(order=c(0,1,1),period=12))
+sarima.Beer.Prod.210.012 <- arima(Beer.Prod.ts,order=c(2,1,0),seasonal=list(order=c(0,1,2),period=12))
+sarima.Beer.Prod.111.012 <- arima(Beer.Prod.ts,order=c(1,1,1),seasonal=list(order=c(0,1,2),period=12))
+
+#================Seleksi Model SARIMA================#
+sarima.Beer.Prod.110.011$aic
+sarima.Beer.Prod.210.012$aic
+sarima.Beer.Prod.111.012$aic
+
+#===================Model Terbaik===================#
+Model.astsa.111.012 <- sarima(Beer.Prod.ts,1,1,1,P=0,D=1,Q=2,S=12,no.constant=TRUE)
+
+#===================Plot Residual===================#
+Res.Model <- residuals(sarima.Beer.Prod.111.012)
+plot.ts(Res.Model,ylab="Residual",xlab="Waktu",main="Plot Residuals (1,1,1)(0,1,2)")
+abline(h=0,col="blue")
+
+#=====================Plot Q-Q======================#
+ggdensity(Res.Model, fill="lightgray")
+ggqqplot(Res.Model)
+
+#===========Shapiro Wilk Normality Test============#
+shapiro.test(Res.Model)
+
+#===============Forecasting Data=================#
+forecast.Model <- predict(sarima.Beer.Prod.111.012,12)
+forecast.Model
+
+#============Plot Forecasting Model==============#
+U <- forecast.Model$pred + 2*forecast.Model$se
+L <- forecast.Model$pred - 2*forecast.Model$se
+max.Beer <- max(Beer.Prod.ts,U)
+min.Beer <- min(Beer.Prod.ts,L)
+ts.plot(Beer.Prod.ts,forecast.Model$pred,type="o",col=1:2,ylim=c(min.Beer,max.Beer))
+lines(U,col="blue",type="b",lty="dashed",lwd=0.5)
+lines(L,col="blue",type="b",lty="dashed",lwd=0.5)
+
+#=========ACF dan PACF Residual Kuadrat==========#
+par(mfrow=c(2,1))
+acf((Res.Model)^2,type="correlation",lag=50,ylab="ACF",xlab="Lag",main="Plot ACF Residu Model")
+abline(h=0,col="red")
+acf((Res.Model)^2,type="partial",lag=50,ylab="PACF",xlab="Lag",main="Plot PACF Residu Model")
+abline(h=0,col="red")
+
+#=========ACF dan PACF Residual Mutlak===========#
+par(mfrow=c(2,1))
+acf(abs(Res.Model),type="correlation",lag=50,ylab="ACF",xlab="Lag",main="Plot ACF Residu Model")
+abline(h=0,col="red")
+acf(abs(Res.Model),type="partial",lag=50,ylab="PACF",xlab="Lag",main="Plot PACF Residu Model")
+abline(h=0,col="red")
+
+#=========Ljung-Box Autocorrelation Test=========#
+AutocorTest((Res.Model)^2 ,type="Ljung-Box")
+AutocorTest(abs(Res.Model),type="Ljung-Box")
+
+#============Uji Heteroskedastisitas============#
+ArchTest(Res.Model)
